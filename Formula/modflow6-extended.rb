@@ -18,7 +18,15 @@ class Modflow6Extended < Formula
   conflicts_with "modflow6", because: "both install `mf6`, `zbud6`, and `libmf6`"
 
   def install
+    # meson drops dependency rpaths at install, and keg-only petsc@3.22 is not
+    # on the Homebrew library path on Linux
+    if OS.linux?
+      ENV.append "LDFLAGS", "-Wl,-rpath,#{formula_opt_lib("modflow-org/recipe-modflow6/petsc@3.22")}"
+    end
+
     system "meson", "setup", "build", "-Dextended=true", *std_meson_args
+    # Open MPI's Fortran wrapper flags link with -flat_namespace on macOS
+    inreplace "build/build.ninja", "-Wl,-flat_namespace", "" if OS.mac?
     system "meson", "compile", "-C", "build", "--verbose"
     system "meson", "install", "-C", "build"
 
