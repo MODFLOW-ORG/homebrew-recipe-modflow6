@@ -1,0 +1,63 @@
+name: update
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'MODFLOW 6 release to build (for example 6.8.1). For available releases see https://github.com/MODFLOW-ORG/modflow6/releases.'
+        required: true
+        type: string
+
+permissions: {}
+
+jobs:
+  update:
+    name: Update modflow6 formula
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: write
+      pull-requests: write
+    env:
+      FORMULA: Formula/modflow6.rb
+      VERSION: ${{ inputs.version }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Check release
+        run: |
+          if [[ ! "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::version must be of the form X.Y.Z, not '${VERSION}'"
+            exit 1
+          fi
+          gh release view "${VERSION}" --repo MODFLOW-ORG/modflow6 --json tagName,publishedAt
+
+      - name: Update formula
+        run: |
+          url="https://github.com/MODFLOW-ORG/modflow6/archive/refs/tags/${VERSION}.tar.gz"
+          sha256="$(curl -fsSL "${url}" | sha256sum | cut -d ' ' -f 1)"
+          sed -i -E \
+            -e "s|^  url \".*\"$|  url \"${url}\"|" \
+            -e "s|^  sha256 \".*\"$|  sha256 \"${sha256}\"|" \
+            "${FORMULA}"
+          if git diff --quiet "${FORMULA}"; then
+            echo "::error::modflow6 formula is already at ${VERSION}"
+            exit 1
+          fi
+          git diff "${FORMULA}"
+
+      - name: Open pull request
+        run: |
+          branch="modflow6-${VERSION}"
+          title="feat(modflow6): update to ${VERSION}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "${branch}"
+          git commit -am "${title}"
+          git push origin "${branch}"
+          gh pr create --base main --head "${branch}" --title "${title}" \
+            --body "Update the modflow6 formula to the ${VERSION} release."
+          # pull requests opened with GITHUB_TOKEN do not trigger workflows
+          gh workflow run tests.yml --ref "${branch}"

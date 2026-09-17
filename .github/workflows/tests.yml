@@ -1,0 +1,79 @@
+name: tests
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  schedule:
+    # weekly, to catch breakage from Homebrew dependency updates
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ macos-15, macos-26 ]
+        include:
+          - os: ubuntu-latest
+            container:
+              image: ghcr.io/homebrew/brew:main
+              options: --privileged
+    runs-on: ${{ matrix.os }}
+    container: ${{ fromJSON(toJSON(matrix.container)) }} # zizmor: ignore[unpinned-images]
+    permissions:
+      contents: read
+    steps:
+      # taps and trusts this repository
+      - name: Set up Homebrew
+        id: set-up-homebrew
+        uses: Homebrew/actions/setup-homebrew@f8d4222eb633e65c2a0157383cf80861fc7fae7f # 2026.09.07.1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Cache Homebrew Bundler RubyGems
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.set-up-homebrew.outputs.gems-path }}
+          key: ${{ matrix.os }}-rubygems-${{ steps.set-up-homebrew.outputs.gems-hash }}
+          restore-keys: ${{ matrix.os }}-rubygems-
+
+      - name: Check style and syntax
+        run: |
+          tap="$(echo "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]' | sed 's|/homebrew-|/|')"
+          echo "TAP=${tap}" >> "${GITHUB_ENV}"
+          brew readall --aliases "${tap}"
+          brew style "${tap}"
+
+      - name: Build and test formulae
+        run: |
+          for formula in $(brew tap-info --json "${TAP}" | jq -r '.[0].formula_names[]'); do
+            brew install --build-from-source --verbose "${formula}"
+            brew test --verbose "${formula}"
+            brew audit --strict --online "${formula}"
+            brew linkage --test "${formula}"
+          done
+
+  livecheck:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/homebrew/brew:main # zizmor: ignore[unpinned-images]
+    permissions:
+      contents: read
+    steps:
+      - name: Set up Homebrew
+        uses: Homebrew/actions/setup-homebrew@f8d4222eb633e65c2a0157383cf80861fc7fae7f # 2026.09.07.1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      # warn when a formula is behind its latest upstream release
+      - name: Check for new upstream releases
+        env:
+          HOMEBREW_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tap="$(echo "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]' | sed 's|/homebrew-|/|')"
+          brew livecheck --tap "${tap}" --json |
+            jq -r '.[] | select(.version.outdated) | "::warning::\(.formula) \(.version.current) is behind \(.version.latest)"'
