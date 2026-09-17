@@ -1,4 +1,6 @@
-# homebrew-recipe
+# homebrew-recipe-modflow6
+
+[![tests](https://github.com/MODFLOW-ORG/homebrew-recipe-modflow6/actions/workflows/tests.yml/badge.svg)](https://github.com/MODFLOW-ORG/homebrew-recipe-modflow6/actions/workflows/tests.yml)
 
 Homebrew formulae for MODFLOW 6.
 
@@ -8,18 +10,9 @@ Homebrew formulae for MODFLOW 6.
 
 ## Install
 
-Tap this repository and install the formula.
-
 ```sh
-brew tap <user>/recipe https://github.com/<user>/homebrew-recipe
-brew install modflow6
-```
-
-To build from a local clone instead, tap the clone path.
-
-```sh
-brew tap <user>/recipe /path/to/homebrew-recipe
-brew install modflow6
+brew tap modflow-org/recipe-modflow6
+brew install modflow-org/recipe-modflow6/modflow6
 ```
 
 Use `--HEAD` to build the `develop` branch.
@@ -27,6 +20,10 @@ Use `--HEAD` to build the `develop` branch.
 ## Test
 
 ```sh
-brew test modflow6
-brew audit --strict modflow6
+brew test modflow-org/recipe-modflow6/modflow6
+brew audit --strict --online modflow-org/recipe-modflow6/modflow6
 ```
+
+The `tests` workflow builds and tests every formula on macOS and Linux for
+pushes, pull requests, and a weekly scheduled run. The scheduled run also
+reports formulae that are behind the latest upstream release.
