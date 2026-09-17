@@ -71,6 +71,9 @@ class PetscAT322 < Formula
 
     # Fortran interface, which MODFLOW 6 uses
     system "mpif90", examples/"ex2f.F90", "-o", "ex2f", *flags
-    assert_match "Norm of error < 1.e-12", shell_output("./ex2f")
+    output = shell_output("./ex2f")
+    assert_match(/Norm of error .+ iterations +\d+/, output)
+    # prints "< 1.e-12" for very small norms; to_f of "<" is 0.0
+    assert_operator output[/Norm of error\s+(\S+)/, 1].to_f, :<, 1.0e-4, "Error norm too large"
   end
 end
