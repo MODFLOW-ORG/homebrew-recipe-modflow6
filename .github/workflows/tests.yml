@@ -48,8 +48,15 @@ jobs:
           brew style "${tap}"
 
       - name: Build and test formulae
+        shell: bash
         run: |
-          for formula in $(brew tap-info --json "${TAP}" | jq -r '.[0].formula_names[]'); do
+          set -euo pipefail
+          formulae="$(brew tap-info --json "${TAP}" | jq -r '.[0].formula_names[]')"
+          if [[ -z "${formulae}" ]]; then
+            echo "::error::no formulae found in ${TAP}"
+            exit 1
+          fi
+          for formula in ${formulae}; do
             brew install --build-from-source --verbose "${formula}"
             brew test --verbose "${formula}"
             brew audit --strict --online "${formula}"
@@ -71,9 +78,12 @@ jobs:
 
       # warn when a formula is behind its latest upstream release
       - name: Check for new upstream releases
+        shell: bash
         env:
           HOMEBREW_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set -euo pipefail
           tap="$(echo "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]' | sed 's|/homebrew-|/|')"
-          brew livecheck --tap "${tap}" --json |
-            jq -r '.[] | select(.version.outdated) | "::warning::\(.formula) \(.version.current) is behind \(.version.latest)"'
+          brew livecheck --tap "${tap}" --json > livecheck.json
+          jq -r '.[] | "\(.formula): current \(.version.current), latest \(.version.latest)"' livecheck.json
+          jq -r '.[] | select(.version.outdated) | "::warning::\(.formula) \(.version.current) is behind \(.version.latest)"' livecheck.json
