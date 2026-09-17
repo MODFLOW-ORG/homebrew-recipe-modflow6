@@ -12,14 +12,13 @@ permissions: {}
 
 jobs:
   update:
-    name: Update modflow6 formula
+    name: Update MODFLOW 6 formulae
     runs-on: ubuntu-latest
     permissions:
       actions: write
       contents: write
       pull-requests: write
     env:
-      FORMULA: Formula/modflow6.rb
       VERSION: ${{ inputs.version }}
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
@@ -34,30 +33,38 @@ jobs:
           fi
           gh release view "${VERSION}" --repo MODFLOW-ORG/modflow6 --json tagName,publishedAt
 
-      - name: Update formula
+      # update every formula built from a MODFLOW 6 release tarball
+      - name: Update formulae
         run: |
-          url="https://github.com/MODFLOW-ORG/modflow6/archive/refs/tags/${VERSION}.tar.gz"
-          sha256="$(curl -fsSL "${url}" | sha256sum | cut -d ' ' -f 1)"
-          sed -i -E \
-            -e "s|^  url \".*\"$|  url \"${url}\"|" \
-            -e "s|^  sha256 \".*\"$|  sha256 \"${sha256}\"|" \
-            "${FORMULA}"
-          if git diff --quiet "${FORMULA}"; then
-            echo "::error::modflow6 formula is already at ${VERSION}"
+          formulae="$(grep -l '^  url "https://github.com/MODFLOW-ORG/modflow6/archive/' Formula/*.rb || true)"
+          if [[ -z "${formulae}" ]]; then
+            echo "::error::no formulae built from a MODFLOW 6 release tarball"
             exit 1
           fi
-          git diff "${FORMULA}"
+          url="https://github.com/MODFLOW-ORG/modflow6/archive/refs/tags/${VERSION}.tar.gz"
+          sha256="$(curl -fsSL "${url}" | sha256sum | cut -d ' ' -f 1)"
+          for formula in ${formulae}; do
+            sed -i -E \
+              -e "s|^  url \".*\"$|  url \"${url}\"|" \
+              -e "s|^  sha256 \".*\"$|  sha256 \"${sha256}\"|" \
+              "${formula}"
+          done
+          if git diff --quiet Formula; then
+            echo "::error::MODFLOW 6 formulae are already at ${VERSION}"
+            exit 1
+          fi
+          git diff Formula
 
       - name: Open pull request
         run: |
           branch="modflow6-${VERSION}"
-          title="feat(modflow6): update to ${VERSION}"
+          title="feat: update MODFLOW 6 formulae to ${VERSION}"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git switch -c "${branch}"
           git commit -am "${title}"
           git push origin "${branch}"
           gh pr create --base main --head "${branch}" --title "${title}" \
-            --body "Update the modflow6 formula to the ${VERSION} release."
+            --body "Update the formulae built from MODFLOW 6 release tarballs to the ${VERSION} release."
           # pull requests opened with GITHUB_TOKEN do not trigger workflows
           gh workflow run tests.yml --ref "${branch}"
