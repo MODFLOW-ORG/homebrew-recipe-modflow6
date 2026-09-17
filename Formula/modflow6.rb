@@ -15,6 +15,8 @@ class Modflow6 < Formula
   depends_on "ninja" => :build
   depends_on "gcc" # for gfortran
 
+  conflicts_with "modflow6-extended", because: "both install `mf6`, `zbud6`, and `libmf6`"
+
   def install
     # parallel and netcdf default to false, so this is the serial build
     system "meson", "setup", "build", *std_meson_args

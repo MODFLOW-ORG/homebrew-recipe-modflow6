@@ -49,6 +49,9 @@ jobs:
 
       - name: Build and test formulae
         shell: bash
+        env:
+          # keep tap dependencies such as petsc@3.22 for the formulae tested after them
+          HOMEBREW_NO_AUTOREMOVE: 1
         run: |
           set -euo pipefail
           formulae="$(brew tap-info --json "${TAP}" | jq -r '.[0].formula_names[]')"
@@ -61,6 +64,8 @@ jobs:
             brew test --verbose "${formula}"
             brew audit --strict --online "${formula}"
             brew linkage --test "${formula}"
+            # modflow6 and modflow6-extended conflict, so remove each after testing
+            brew uninstall --formula "${formula}"
           done
 
   livecheck:
